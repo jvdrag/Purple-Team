@@ -1,14 +1,13 @@
 # Team Purple
 # Title: InCollege Epic #1
 # Description: Basic features for InCollege
-
+import os
 
 
 def create_account():
   # Output messages to user and take username input
   print("\nPlease enter the following information to create an account.\n")
   username = input("Username: ")
-
   # Open file for read, check for existing username and number of users
   numUsers = 1
   with open("accounts.txt", "r+") as file1:
@@ -149,8 +148,14 @@ def user_display():
 
   # Check which selection was made by the user
   if selection == "1":
+    if not os.path.exists("accounts.txt"):
+      with open("accounts.txt", "w"):
+        pass
     create_account()
   elif selection == "2":
+    if not os.path.exists("accounts.txt"):
+      with open("accounts.txt", "w"):
+        pass
     user_login()
   else:
     print("Invalid selection. Please try again.\n")
