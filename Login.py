@@ -125,19 +125,24 @@ class UserAccountManager:
         user = self.cursor.fetchone()
         if user:
             print("\nYou have successfully logged in!")
-            self.cursor.execute("SELECT * FROM friends WHERE friend_id=?",(username,))
+            
+            # Check for pending friend requests
+            self.cursor.execute("SELECT user_id FROM friends WHERE friend_id=?", (username,))
             pending_requests = self.cursor.fetchall()
+            
             if pending_requests:
                 print("You have friend requests!")
                 for i in pending_requests:
-                    print("Pending friend request from", i[0])
+                    print("Pending friend request from", i[0])  # Access the sender's username using i[0]
                     ans = input("Do you accept? Enter Y or N: ")
-                    if ans == "Y" or ans == "y":
-                        self.accept_friend_request(username,i[0])
+                    if ans.lower() == "y":
+                        self.accept_friend_request(username, i[0])  # Pass the logged-in user's username and sender's username
                         self.cursor.execute("DELETE FROM friends WHERE user_id=? AND friend_id=?", (i[0], username))
                     else:
-                        self.reject_friend_request(username,i[0])
+                        self.reject_friend_request(username, i[0])  # Pass the logged-in user's username and sender's username
                         self.cursor.execute("DELETE FROM friends WHERE user_id=? AND friend_id=?", (i[0], username))
+                self.conn.commit()  # Commit changes to the database
+
             self.logged_in_username = username
             self.memberOptions()
         else:
