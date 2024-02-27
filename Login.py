@@ -264,7 +264,6 @@ class UserAccountManager:
 
         if matching_users:
             print("\nMatching users:")
-            print("Username | First Name | Last Name | University | Major")
             for user in matching_users:
                 username, firstname, lastname, university, major = user
                 print("------------------------------------------------------------------------------------------------------------------")
@@ -299,19 +298,35 @@ class UserAccountManager:
 
     def showFriends(self):
         # Query the database for the user's friends with their additional information
-        self.cursor.execute("SELECT firstname, lastname, university, major FROM users WHERE username IN (SELECT friend_id FROM friends WHERE user_id=?)", (self.logged_in_username,))
+        self.cursor.execute("SELECT username, firstname, lastname, university, major FROM users WHERE username IN (SELECT friend_id FROM friends WHERE user_id=?)", (self.logged_in_username,))
         friends_info = self.cursor.fetchall()
 
         if friends_info:
             print("\nYour Friends:")
             for friend_info in friends_info:
-                firstname, lastname, university, major = friend_info
-                print(f"Name: {firstname} {lastname}, University: {university}, Major: {major}")
+                username, firstname, lastname, university, major = friend_info
+                print(f"Username: {username},Name: {firstname} {lastname}, University: {university}, Major: {major}")
+            
+            # Option to remove a friend
+            print("\n1. Go Back")
+            print("2. Remove Friend")
+            choice = input("Selection: ")
+            if choice == "1":
+                self.memberOptions()
+            elif choice == "2":
+                friend_to_remove = input("\nEnter the username of the person you want to remove as a friend: ")
+                self.remove_friend(self.logged_in_username, friend_to_remove)
+            else:
+                print("Invalid Choice.")
+                self.showFriends()
+
+
         else:
             print("\nNo friends.")
 
         # Go back to the member options menu
         self.memberOptions()
+
 
 
     def learnSkill(self):
