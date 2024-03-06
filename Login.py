@@ -46,6 +46,10 @@ class UserAccountManager:
         self.conn.commit()
 
     def createAccount(self):
+        if self.TableFull():
+            print("\nTable contains 10 records, cannot add more\n")
+            self.userDisplay()
+            return
         print("\nPlease enter the following information to create an account.\n")
         username = input("Username: ")
         if self.usernameExists(username):
@@ -57,7 +61,6 @@ class UserAccountManager:
         lastname = input("Last Name: ")
         university = input("University: ")
         major = input("Major: ")
-        self.usernames.append(username)
         self.cursor.execute("INSERT INTO users (username, password, firstname, lastname, university, major) VALUES (?, ?, ?, ?, ?, ?)",
                             (username, password, firstname, lastname, university, major))
         self.conn.commit()
@@ -67,6 +70,14 @@ class UserAccountManager:
     def usernameExists(self, username):
         self.cursor.execute("SELECT * FROM users WHERE username=?", (username,))
         return self.cursor.fetchone() is not None
+
+    def TableFull(self):
+        self.cursor.execute("SELECT COUNT(*) FROM users")
+        rowcount = self.cursor.fetchone()
+        if rowcount[0] > 9:
+            return True
+        else:
+            return False
 
     def passwordCheck(self):
         password = input("Password: ")
@@ -125,19 +136,24 @@ class UserAccountManager:
         user = self.cursor.fetchone()
         if user:
             print("\nYou have successfully logged in!")
-            self.cursor.execute("SELECT * FROM friends WHERE friend_id=?",(username,))
+
+            # Check for pending friend requests
+            self.cursor.execute("SELECT user_id FROM friends WHERE friend_id=?", (username,))
             pending_requests = self.cursor.fetchall()
+
             if pending_requests:
                 print("You have friend requests!")
                 for i in pending_requests:
-                    print("Pending friend request from", i[0])
+                    print("Pending friend request from", i[0])  # Access the sender's username using i[0]
                     ans = input("Do you accept? Enter Y or N: ")
-                    if ans == "Y" or ans == "y":
-                        self.accept_friend_request(username,i[0])
+                    if ans.lower() == "y":
+                        self.accept_friend_request(username, i[0])  # Pass the logged-in user's username and sender's username
                         self.cursor.execute("DELETE FROM friends WHERE user_id=? AND friend_id=?", (i[0], username))
                     else:
-                        self.reject_friend_request(username,i[0])
+                        self.reject_friend_request(username, i[0])  # Pass the logged-in user's username and sender's username
                         self.cursor.execute("DELETE FROM friends WHERE user_id=? AND friend_id=?", (i[0], username))
+                self.conn.commit()  # Commit changes to the database
+
             self.logged_in_username = username
             self.memberOptions()
         else:
@@ -178,7 +194,8 @@ class UserAccountManager:
         print("1. Job/Internship opportunities")
         print("2. Friends")
         print("3. Learn a new skill")
-        print("4. Exit")
+        print("4. Create your profile")
+        print("5. Exit")
         choice = input("Enter your choice: ")
         if choice == "1":
             print("\nYou have selected to search for a job.")
@@ -190,11 +207,116 @@ class UserAccountManager:
             print("\nYou have selected to learn a new skill.")
             self.learnSkill()
         elif choice == "4":
+            print("\nYou have selected to create your profile.")
+            self.createProfile()
+        elif choice == "5":
             print("\nYou have selected to exit.")
             exit()
         else:
             print("\nInvalid choice. Please try again.")
             self.memberOptions()
+
+    def createProfile(self):
+      user_id = self.logged_in_username
+      current_profile = self.getProfile(user_id)
+
+      print("Create or update your profile")
+      title = input("Enter a line of text for your title (leave blank to keep existing): ")
+      title = title or current_profile.get('Title', '')
+
+
+      major = input("Enter your major (leave blank to keep existing): ")
+      major = ' '.join(word.capitalize() for word in (major or current_profile.get('Major', '')).split())
+
+      university = input("Enter your university (leave blank to keep existing): ")
+      university = ' '.join(word.capitalize() for word in (university or current_profile.get('University', '')).split())
+
+      about = input("Share about yourself for your profile's About section (leave blank to keep existing): ")
+      about = about or current_profile.get('About', '')
+
+      school_name = input("Enter your school's name (leave blank to keep existing): ")
+      school_name = school_name or current_profile.get('School', '')
+
+      degree = input("Enter the degree (leave blank to keep existing): ")
+      degree = degree or current_profile.get('Degree', '')
+
+      years_attended = input("Enter the number of years attended (leave blank to keep existing): ")
+      years_attended = years_attended if years_attended else str(current_profile.get('Years_attended', ''))
+
+
+      experiences = current_profile.get('Experiences', [])
+      for i in range(1, 4):  
+          print(f"Enter details for past job {i} (leave blank to skip):")
+          title = input("Job title: ")
+          employer = input("Employer: ")
+          date_started = input("Date started: ")
+          date_ended = input("Date ended: ")
+          location = input("Location: ")
+          description = input("Job description: ")
+
+          if any([title, employer, date_started, date_ended, location, description]): 
+              experiences.append([title, employer, date_started, date_ended, location, description])
+              if len(experiences) >= 3:  
+                  break
+
+      profile_entry = [user_id, title, major, university, about, school_name, degree, years_attended, experiences]
+      self.updateProfileCSV(profile_entry)
+
+
+      updated_profile = self.getProfile(user_id)
+      print("\nYour updated profile:")
+      print(f"Title: {updated_profile.get('Title', 'Not set')}")
+      print(f"Major: {updated_profile.get('Major', 'Not set')}")
+      print(f"University: {updated_profile.get('University', 'Not set')}")
+      print(f"About: {updated_profile.get('About', 'Not set')}")
+      print(f"School Name: {updated_profile.get('School', 'Not set')}")
+      print(f"Degree: {updated_profile.get('Degree', 'Not set')}")
+      print(f"Years Attended: {updated_profile.get('Years_attended', 'Not set')}")
+      # Print experiences
+      if 'Experiences' in updated_profile:
+          for i, experience in enumerate(updated_profile['Experiences'], start=1):
+              print(f"\nExperience {i}:")
+              print(f"Job Title: {experience[0]}, Employer: {experience[1]}, Dates: {experience[2]} - {experience[3]}, Location: {experience[4]}, Description: {experience[5]}")
+
+      self.memberOptions()
+
+    def updateProfileCSV(self, profile_entry):
+      with open("Profiles.csv", "a+", newline='') as pf:
+          pf.seek(0)
+          existing_entries = list(csv.reader(pf))
+          writer = csv.writer(pf)
+
+          updated = False
+          for i, entry in enumerate(existing_entries):
+              if entry and entry[0] == profile_entry[0]:  
+                  existing_entries[i] = profile_entry
+                  updated = True
+                  break
+          if updated:
+              pf.truncate(0)  # Clear file
+              writer.writerows(existing_entries)  
+          else:
+              writer.writerow(profile_entry) 
+
+    def getProfile(self, user_id):
+      if os.path.exists("Profiles.csv"):
+          with open("Profiles.csv", "r") as pf:
+              reader = csv.reader(pf)
+              for row in reader:
+                  if row and row[0] == user_id:
+                      experiences = eval(row[8]) if len(row) > 8 and row[8] else []  
+                      return {
+                          'Title': row[1], 
+                          'Major': row[2], 
+                          'University': row[3], 
+                          'About': row[4], 
+                          'School': row[5], 
+                          'Degree': row[6], 
+                          'Years_attended': row[7],
+                          'Experiences': experiences 
+                      }
+      return {}
+
 
     def jobSearch(self):
         if not os.path.exists("InCollege_Jobs.csv"):
@@ -239,6 +361,7 @@ class UserAccountManager:
     def friends(self):
         print("\n1. Show My Network")
         print("2. Add Friend")
+        print("3. Go Back")
         #print("3. Pending Requests")
 
         choice = input("Enter Your Choice: ")
@@ -246,8 +369,9 @@ class UserAccountManager:
             self.showFriends()
         elif choice == '2':
             self.addFriend()
-        #elif choice == '3':
+        elif choice == '3':
             #self.pendingRequests()
+            self.memberOptions()
         else:
             print("\nInvalid Choice!")
             self.memberOptions()
@@ -256,7 +380,7 @@ class UserAccountManager:
     def searchUsers(self):
         print("\nYou selected to search for friends.")
         search_criteria = input("Enter the last name, university, or major of the person you are looking for: ")
-        
+
         # Search for users based on last name, university, or major
         self.cursor.execute("SELECT username, firstname, lastname, university, major FROM users WHERE lastname=? OR university=? OR major=?", 
                             (search_criteria, search_criteria, search_criteria))
@@ -268,7 +392,7 @@ class UserAccountManager:
                 username, firstname, lastname, university, major = user
                 print("------------------------------------------------------------------------------------------------------------------")
                 print(f"Username: {username} | Name: {firstname} {lastname} | University: {university} | Major: {major}\n")
-            
+
         else:
             print("\nNo users found matching the criteria.")
 
@@ -277,16 +401,16 @@ class UserAccountManager:
 
         self.searchUsers()
         friend_username = input("Enter the username of the person you want to add as a friend: ")
-        
+
         # Check if the entered username exists in the users table
         self.cursor.execute("SELECT * FROM users WHERE username=?", (friend_username,))
         friend = self.cursor.fetchone()
-        
+
         if friend:
             # Insert a new row into the friends table for the current user
             print("A friend request was sent to", friend_username)
             self.cursor.execute("INSERT INTO friends (user_id, friend_id) VALUES (?, ?)", (self.logged_in_username, friend_username))
-            
+
             # Insert a new row into the friends table for the friend
             #self.cursor.execute("INSERT INTO friends (user_id, friend_id) VALUES (?, ?)", (friend_username, self.logged_in_username))
             self.conn.commit()
@@ -297,35 +421,49 @@ class UserAccountManager:
             self.friends()
 
     def showFriends(self):
-        # Query the database for the user's friends with their additional information
-        self.cursor.execute("SELECT username, firstname, lastname, university, major FROM users WHERE username IN (SELECT friend_id FROM friends WHERE user_id=?)", (self.logged_in_username,))
-        friends_info = self.cursor.fetchall()
+      self.cursor.execute("SELECT username, firstname, lastname, university, major FROM users WHERE username IN (SELECT friend_id FROM friends WHERE user_id=?)", (self.logged_in_username,))
+      friends_info = self.cursor.fetchall()
 
-        if friends_info:
-            print("\nYour Friends:")
-            for friend_info in friends_info:
-                username, firstname, lastname, university, major = friend_info
-                print(f"Username: {username},Name: {firstname} {lastname}, University: {university}, Major: {major}")
-            
-            # Option to remove a friend
-            print("\n1. Go Back")
-            print("2. Remove Friend")
-            choice = input("Selection: ")
-            if choice == "1":
-                self.memberOptions()
-            elif choice == "2":
-                friend_to_remove = input("\nEnter the username of the person you want to remove as a friend: ")
-                self.remove_friend(self.logged_in_username, friend_to_remove)
-            else:
-                print("Invalid Choice.")
-                self.showFriends()
+      if friends_info:
+          print("\nYour Friends:")
+          for friend_info in friends_info:
+              username, firstname, lastname, university, major = friend_info
+              print(f"Username: {username}, Name: {firstname} {lastname}, University: {university}, Major: {major}", end='')
+              if self.getProfile(username):  
+                  print(", Profile", end='')  
+              print()  
 
-
-        else:
-            print("\nNo friends.")
-
-        # Go back to the member options menu
-        self.memberOptions()
+          print("\n1. Go Back")
+          print("2. Remove Friend")
+          print("3. View Friend's Profile")
+          choice = input("Selection: ")
+          if choice == "1":
+              self.memberOptions()
+          elif choice == "2":
+              friend_to_remove = input("\nEnter the username of the person you want to remove as a friend: ")
+              self.remove_friend(self.logged_in_username, friend_to_remove)
+          elif choice == "3":
+              friend_to_view = input("\nEnter the username of the friend whose profile you want to view: ")
+              self.viewFriendProfile(friend_to_view)
+          else:
+              print("Invalid Choice.")
+              self.showFriends()
+      else:
+          print("\nNo friends.")
+          self.memberOptions()
+    def viewFriendProfile(self, friend_username):
+      self.cursor.execute("SELECT * FROM friends WHERE user_id = ? AND friend_id = ?", (self.logged_in_username, friend_username))
+      if self.cursor.fetchone():
+          friend_profile = self.getProfile(friend_username)
+          if friend_profile:
+              print(f"\nProfile of {friend_username}:")
+              for key, value in friend_profile.items():
+                  print(f"{key}: {value}")
+          else:
+              print("\nThis friend has not created a profile yet.")
+      else:
+          print("\nYou are not friends with this user.")
+      self.memberOptions()
 
 
 
@@ -350,6 +488,7 @@ class UserAccountManager:
         print("2. Browse InCollege")
         print("3. Business Solutions")
         print("4. Directories")
+        print("5. Go Back")
         selection = input("Selection: ")
 
         if selection == "1":
@@ -361,6 +500,7 @@ class UserAccountManager:
             print("5. Blog")
             print("6. Careers")
             print("7. Developers")
+            print("8. Go Back")
             option = input("Selection: ")
             if option == "1":
                 self.createAccount()
@@ -372,12 +512,16 @@ class UserAccountManager:
                 print("\nIn College Pressroom: Stay on top of the latest news, updates, and reports.")
             elif option in ["5", "6", "7"]:
                 print("\nUnder construction.")
+            elif option == "8":
+                self.usefulLinks()
             else:
                 print("\nInvalid selection.")
             self.usefulLinks()
         elif selection in ["2", "3", "4"]:
             print("\nUnder construction.")
             self.usefulLinks()
+        elif selection == "5":
+            self.userDisplay()
         else:
             print("\nInvalid selection.")
 
@@ -504,17 +648,13 @@ class UserAccountManager:
         print("2. Login to an Existing InCollege Account")
         print("3. Connect with an existing member")
         print("4. Watch InCollege introduction video")
-        print("5. Exit")
+        print("5. Useful Links")
+        print("6. InCollege Important Links")
+        print("7. Exit")
         selection = input("Selection: ")
         if selection == "1":
-            if not os.path.exists("accounts.txt"):
-                with open("accounts.txt", "w"):
-                    pass
             self.createAccount()
         elif selection == "2":
-            if not os.path.exists("accounts.txt"):
-                with open("accounts.txt", "w"):
-                    pass
             self.userLogin()
         elif selection == "3":
             self.connectWithSomeone()
@@ -525,7 +665,13 @@ class UserAccountManager:
             selection = input("Selection: ")
             self.userDisplay()
         elif selection == "5":
-            print("You have chosen to exit.\n")
+            print("\nYou have selected Useful Links.")
+            self.usefulLinks()
+        elif selection == "6":
+            print("\nYou have selected InCollege Important Links.\n")
+            self.importantLinks()
+        elif selection == "7":
+            print("\nYou have chosen to exit.\n")
             exit()
         else:
             print("Invalid selection. Please try again.\n")
